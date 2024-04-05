@@ -1,0 +1,13 @@
+md5: 3ff80db995b87f2c7a5c1c65fce681b4
+frozen: true
+deps:
+- path: raw
+  repo:
+    url: git@github.com:hamilton-health-sciences/traq_data.git
+    rev_lock: 441fedcb20377df8a0bfeec4b275e41776a49ff6
+outs:
+- md5: a1a3d2bdb1e2bde0b0fa3dd6b28b69ca.dir
+  size: 56145552617
+  nfiles: 4685
+  hash: md5
+  path: raw

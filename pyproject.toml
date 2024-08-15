@@ -19,7 +19,7 @@ openpyxl = "^3.1.2"
 numba = "0.57.1"
 pyod = "^1.1.0"
 plotnine = "^0.12.2"
-critdd = {path = "../src/critdd/dist/critdd-0.0.5.dev0-py3-none-any.whl"}
+# critdd = {path = "../src/critdd/dist/critdd-0.0.5.dev0-py3-none-any.whl"}
 xlrd = ">=2.0.01"
 metaod = {git = "https://github.com/wjn0/MetaOD.git"}
 scikit-learn = "1.2.2"

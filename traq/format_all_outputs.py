@@ -5,6 +5,8 @@ import os
 
 import numpy as np
 import pandas as pd
+import scipy as sp
+import scipy.stats
 from plotnine import (
     aes,
     geom_jitter,
@@ -133,6 +135,19 @@ def main(args):  # noqa: C901
             print("skipping ", comparison_fn)
 
     df_raw = pd.concat(dfs, axis=0)
+
+    # Head-to-head ECOD vs Euclidean comparison
+    if "Euclidean" in list(df_raw["algorithm"]):
+        auroc_comparison = df_raw.pivot(index=("trial", "snapshot", "plate"), columns="algorithm", values="auroc")[["ECOD", "Euclidean"]].dropna()
+        ecod_median = auroc_comparison["ECOD"].median()
+        euc_median = auroc_comparison["Euclidean"].median()
+        test = sp.stats.wilcoxon(auroc_comparison["ECOD"], auroc_comparison["Euclidean"])
+        print(f"ECOD vs Euclidean median: {ecod_median} vs {euc_median} ({test})")
+        print(auroc_comparison["ECOD"].describe())
+        print(auroc_comparison["Euclidean"].describe())
+    else:
+        import pdb; pdb.set_trace()
+
     df_algo = df_raw[df_raw["algorithm"] == algo]
 
     print("Total number of tables pumped through the pipeline: ", len(df_algo))
@@ -257,6 +272,26 @@ def main(args):  # noqa: C901
         [("complete SDV baseline", "precision")]
     )
 
+    def random_5pct_anomaly_rate(df):
+        return 0.05 * (
+            df.groupby("trial")["num_anomalies"].sum()
+            / df.groupby("trial")["num_samples"].sum()
+        )
+
+    df_random_5pct_anomaly_rate_ci = bootstrap_ci(random_5pct_anomaly_rate, df)
+    df_random_5pct_anomaly_rate = (
+        random_5pct_anomaly_rate(df).map(fmt_float)
+        + " ("
+        + df_random_5pct_anomaly_rate_ci["ci.lower"].map(fmt_float)
+        + ", "
+        + df_random_5pct_anomaly_rate_ci["ci.upper"].map(fmt_float)
+        + ")"
+    )
+    df_random_5pct_anomaly_rate = df_random_5pct_anomaly_rate.to_frame()
+    df_random_5pct_anomaly_rate.columns = pd.MultiIndex.from_tuples(
+        [("5pct SDV baseline", "precision")]
+    )
+
     df["true_positives_at_k"] = df["precision_at_k"] * df["num_anomalies"]
 
     def tpk(df):
@@ -326,6 +361,16 @@ def main(args):  # noqa: C901
             / df.groupby("trial")["num_anomalies"].sum()
         )
 
+    def specat5pct(df):
+        df = df.copy()
+        num_negatives = df["num_samples"] - df["num_anomalies"]
+        num_positive_predictions = 0.05 * df["num_samples"]
+        num_false_positives = num_positive_predictions - df["true_positives_at_5pct"]
+        df["num_true_negatives"] = num_negatives - num_false_positives
+        df["num_negatives"] = num_negatives
+
+        return df.groupby("trial")["num_true_negatives"].sum() / df.groupby("trial")["num_negatives"].sum()
+
     df_precision_at_5pct_ci = bootstrap_ci(pat5pct, df)
     df_precision_at_5pct = (
         pat5pct(df).map(fmt_float)
@@ -345,13 +390,23 @@ def main(args):  # noqa: C901
         + df_recall_at_5pct_ci["ci.upper"].map(fmt_float)
         + ")"
     )
-    df_pr_at_5pct = pd.concat((df_precision_at_5pct, df_recall_at_5pct), axis=1)
+    df_specificity_at_5pct_ci = bootstrap_ci(specat5pct, df)
+    df_specificity_at_5pct = specat5pct(df)
+    df_specificity_at_5pct = (
+        specat5pct(df).map(fmt_float)
+        + " ("
+        + df_specificity_at_5pct_ci["ci.lower"].map(fmt_float)
+        + ", "
+        + df_specificity_at_5pct_ci["ci.upper"].map(fmt_float)
+        + ")"
+    )
+    df_pr_at_5pct = pd.concat((df_precision_at_5pct, df_recall_at_5pct, df_specificity_at_5pct), axis=1)
     df_pr_at_5pct.columns = pd.MultiIndex.from_tuples(
-        [("at 5%", "precision"), ("at 5%", "recall")]
+        [("at 5%", "precision"), ("at 5%", "recall"), ("at 5%", "specificity")]
     )
 
     df_pr_fmt = pd.concat(
-        (df_anomaly_rate, df_precision_at_k, df_pr_at_10, df_pr_at_5pct), axis=1
+        (df_anomaly_rate, df_random_5pct_anomaly_rate, df_precision_at_k, df_pr_at_10, df_pr_at_5pct), axis=1
     )
     # for col in df_pr_fmt: df_pr_fmt[col] = df_pr_fmt[col].map(fmt_float)
 
